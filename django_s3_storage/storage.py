@@ -409,6 +409,16 @@ class S3Storage(Storage):
         except KeyError:
             return meta["ContentLength"]
 
+    def generate_presigned_url(self, name, extra_params=None):
+        params = extra_params.copy() if extra_params else {}
+        params.update(self._object_params(name))
+        url = self.s3_connection.generate_presigned_url(
+            ClientMethod="get_object",
+            Params=params,
+            ExpiresIn=self.settings.AWS_S3_MAX_AGE_SECONDS,
+        )
+        return url
+
     def url(self, name, extra_params=None):
         # Use a public URL, if specified.
         if self.settings.AWS_S3_PUBLIC_URL:
@@ -418,14 +428,9 @@ class S3Storage(Storage):
                     "with AWS_S3_PUBLIC_URL"
                 )
             return urljoin(self.settings.AWS_S3_PUBLIC_URL, filepath_to_uri(name))
-        # Otherwise, generate the URL.
-        params = extra_params.copy() if extra_params else {}
-        params.update(self._object_params(name))
-        url = self.s3_connection.generate_presigned_url(
-            ClientMethod="get_object",
-            Params=params,
-            ExpiresIn=self.settings.AWS_S3_MAX_AGE_SECONDS,
-        )
+            
+        # Otherwise, use the presigned URL.
+        url = self.generate_presigned_url(name, extra_params)
         # Strip off the query params if we're not interested in bucket auth.
         if not self.settings.AWS_S3_BUCKET_AUTH:
             url = urlunsplit(urlsplit(url)[:3] + ("", "",))
